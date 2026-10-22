@@ -14,6 +14,7 @@ import { getEta } from '../services/etaService.js'
 import { processLocation, reportStaleBus } from '../services/gpsService.js'
 import { config } from '../config/index.js'
 import { fcmStatus, sendPushToken } from '../services/firebaseService.js'
+import { generateRoutePolyline } from '../services/mapsService.js'
 
 const api = Router()
 const admin = [requireAuth, requireRole('admin')]
@@ -292,7 +293,7 @@ api.post('/simulator/:busId/:action', ...admin, async (req, res) => {
   res.json({ success: true, message: 'GPS simulation started.', running: true })
 })
 
-api.get('/health', (req, res) => res.json({ success: true, data: { service: 'smart-bus-tracker', database: 'connected', maps: config.googleMapsApiKey ? 'google-routes' : config.demoMode ? 'demo' : 'unconfigured', demoMode: config.demoMode } }))
+api.get('/health', (req, res) => res.json({ success: true, data: { service: 'smart-bus-tracker', database: 'connected', maps: config.routingProvider === 'osrm' ? 'osrm' : config.googleMapsApiKey ? 'google-routes' : config.demoMode ? 'demo' : 'unconfigured', routingProvider: config.routingProvider, demoMode: config.demoMode } }))
 
 export default api
 
@@ -301,3 +302,55 @@ function publicUser(user) { return { id: user._id, name: user.name, email: user.
 function pick(source, keys) { return Object.fromEntries(keys.filter((key) => source?.[key] !== undefined).map((key) => [key, source[key]])) }
 function routeQuery(id) { return id.match(/^[a-f\d]{24}$/i) ? { _id: id } : { routeId: String(id).toUpperCase() } }
 async function findRoute(id) { return Route.findOne(routeQuery(id)).populate({ path: 'stops', options: { sort: { sequence: 1 } } }) }
+
+
+async function regenerateRoutePolyline(route) {
+  const stops = await Stop.find({
+    routeId: route._id,
+    isActive: true
+  }).sort({ sequence: 1 })
+
+  if (stops.length < 2) {
+    throw Object.assign(
+      new Error(
+        'At least two active stops are required to generate route geometry.'
+      ),
+      { status: 400 }
+    )
+  }
+
+  const polyline = await generateRoutePolyline(stops)
+
+  route.polyline = polyline
+
+  await route.save()
+
+  return route
+}
+
+api.post(
+  '/routes/:routeId/generate-polyline',
+  ...admin,
+  async (req, res) => {
+    const route = await Route.findOne(routeQuery(req.params.routeId))
+
+    if (!route) {
+      return res.status(404).json({
+        success: false,
+        message: 'Route not found.'
+      })
+    }
+
+    const updatedRoute = await regenerateRoutePolyline(route)
+
+    res.json({
+      success: true,
+      message: 'Road-following route geometry generated successfully.',
+      data: {
+        routeId: updatedRoute.routeId,
+        routeName: updatedRoute.routeName,
+        polyline: updatedRoute.polyline
+      }
+    })
+  }
+)

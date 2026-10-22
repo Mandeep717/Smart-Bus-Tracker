@@ -28,15 +28,52 @@ function secondsFromDuration(value) {
   )
 }
 
-export async function routeEta(origin, destination) {
+export async function routeEta(origin, destination, intermediateStops = []) {
+  /*
+   * ------------------------------------------------------------
+   * VALIDATE COORDINATES
+   * ------------------------------------------------------------
+   */
+
+  const normalizeCoordinates = (point) => ({
+    latitude: Number(point?.latitude),
+    longitude: Number(point?.longitude)
+  })
+
+  const normalizedOrigin = normalizeCoordinates(origin)
+  const normalizedDestination = normalizeCoordinates(destination)
+
+  const normalizedStops = intermediateStops.map(normalizeCoordinates)
+
+  const allCoordinates = [
+    normalizedOrigin,
+    ...normalizedStops,
+    normalizedDestination
+  ]
+
+  const validCoordinates = allCoordinates.every(
+    (point) =>
+      Number.isFinite(point.latitude) &&
+      Number.isFinite(point.longitude) &&
+      point.latitude >= -90 &&
+      point.latitude <= 90 &&
+      point.longitude >= -180 &&
+      point.longitude <= 180
+  )
+
+  if (!validCoordinates) {
+    throw Object.assign(
+      new Error('Invalid GPS coordinates supplied to Google Routes API.'),
+      { status: 400 }
+    )
+  }
+
   /*
    * ------------------------------------------------------------
    * DEMO MODE
    * ------------------------------------------------------------
-   * If Google Maps API key is not configured and demo mode is
-   * enabled, calculate ETA using straight-line distance and
-   * an assumed average speed of 25 km/h.
    */
+
   if (!config.googleMapsApiKey) {
     if (!config.demoMode) {
       throw Object.assign(
@@ -47,62 +84,42 @@ export async function routeEta(origin, destination) {
       )
     }
 
-    const distanceMeters = distanceBetween(origin, destination)
+    let totalDistanceMeters = 0
+
+    for (let i = 0; i < allCoordinates.length - 1; i++) {
+      totalDistanceMeters += distanceBetween(
+        allCoordinates[i],
+        allCoordinates[i + 1]
+      )
+    }
 
     const durationSeconds = Math.max(
       60,
-      Math.round(
-        distanceMeters / (25 * 1000 / 3600)
-      )
-    )
-
-    console.log(
-      `[ETA] Using DEMO calculation | Distance: ${distanceMeters}m | ETA: ${durationSeconds}s`
+      Math.round(totalDistanceMeters / (25 * 1000 / 3600))
     )
 
     return {
-      distanceMeters,
+      distanceMeters: totalDistanceMeters,
       durationSeconds,
       trafficCondition: 'UNKNOWN',
-      source: 'demo'
+      source: 'demo',
+      encodedPolyline: null,
+      polyline: null
     }
   }
 
   /*
    * ------------------------------------------------------------
-   * GOOGLE ROUTES API
+   * GOOGLE ROUTES API REQUEST
    * ------------------------------------------------------------
    */
-
-  const latitude = Number(origin.latitude)
-  const longitude = Number(origin.longitude)
-
-  const destinationLatitude = Number(destination.latitude)
-  const destinationLongitude = Number(destination.longitude)
-
-  /*
-   * Validate coordinates before sending the request.
-   */
-  if (
-    !Number.isFinite(latitude) ||
-    !Number.isFinite(longitude) ||
-    !Number.isFinite(destinationLatitude) ||
-    !Number.isFinite(destinationLongitude)
-  ) {
-    throw Object.assign(
-      new Error(
-        'Invalid GPS coordinates supplied to Google Routes API.'
-      ),
-      { status: 400 }
-    )
-  }
 
   const requestBody = {
     origin: {
       location: {
         latLng: {
-          latitude,
-          longitude
+          latitude: normalizedOrigin.latitude,
+          longitude: normalizedOrigin.longitude
         }
       }
     },
@@ -110,29 +127,31 @@ export async function routeEta(origin, destination) {
     destination: {
       location: {
         latLng: {
-          latitude: destinationLatitude,
-          longitude: destinationLongitude
+          latitude: normalizedDestination.latitude,
+          longitude: normalizedDestination.longitude
         }
       }
     },
+
+    intermediates: normalizedStops.map((stop) => ({
+      location: {
+        latLng: {
+          latitude: stop.latitude,
+          longitude: stop.longitude
+        }
+      }
+    })),
 
     travelMode: 'DRIVE',
 
     routingPreference: 'TRAFFIC_AWARE',
 
+    polylineQuality: 'HIGH_QUALITY',
+
+    polylineEncoding: 'ENCODED_POLYLINE',
+
     departureTime: new Date(Date.now() + 60 * 1000).toISOString()
   }
-
-  console.log('[Google Routes] Request:', {
-    origin: {
-      latitude,
-      longitude
-    },
-    destination: {
-      latitude: destinationLatitude,
-      longitude: destinationLongitude
-    }
-  })
 
   let response
 
@@ -147,23 +166,22 @@ export async function routeEta(origin, destination) {
 
           'X-Goog-Api-Key': config.googleMapsApiKey,
 
-          'X-Goog-FieldMask':
-            'routes.duration,routes.staticDuration,routes.distanceMeters'
+          'X-Goog-FieldMask': [
+            'routes.duration',
+            'routes.staticDuration',
+            'routes.distanceMeters',
+            'routes.polyline.encodedPolyline'
+          ].join(',')
         },
 
         body: JSON.stringify(requestBody)
       }
     )
   } catch (error) {
-    console.error(
-      '[Google Routes] Network request failed:',
-      error
-    )
+    console.error('[Google Routes] Network request failed:', error)
 
     throw Object.assign(
-      new Error(
-        'Could not connect to Google Routes API.'
-      ),
+      new Error('Could not connect to Google Routes API.'),
       {
         status: 502,
         cause: error
@@ -173,7 +191,7 @@ export async function routeEta(origin, destination) {
 
   /*
    * ------------------------------------------------------------
-   * READ GOOGLE RESPONSE
+   * PROCESS RESPONSE
    * ------------------------------------------------------------
    */
 
@@ -182,11 +200,6 @@ export async function routeEta(origin, destination) {
   try {
     payload = await response.json()
   } catch (error) {
-    console.error(
-      '[Google Routes] Invalid JSON response:',
-      error
-    )
-
     throw Object.assign(
       new Error(
         `Google Routes API returned an invalid response (HTTP ${response.status}).`
@@ -195,32 +208,14 @@ export async function routeEta(origin, destination) {
     )
   }
 
-  /*
-   * ------------------------------------------------------------
-   * GOOGLE API ERROR
-   * ------------------------------------------------------------
-   *
-   * IMPORTANT:
-   * Do NOT hide Google's actual error.
-   * This allows us to identify API-key, billing,
-   * permission, quota, or request problems.
-   */
   if (!response.ok) {
-    console.error(
-      '[Google Routes API ERROR]',
-      {
-        httpStatus: response.status,
-        statusText: response.statusText,
-        googleError: payload?.error || payload
-      }
-    )
-
-    const googleMessage =
-      payload?.error?.message ||
-      `Google Routes API returned HTTP ${response.status}.`
+    console.error('[Google Routes API ERROR]', payload?.error || payload)
 
     throw Object.assign(
-      new Error(googleMessage),
+      new Error(
+        payload?.error?.message ||
+          `Google Routes API returned HTTP ${response.status}.`
+      ),
       {
         status: response.status,
         googleError: payload?.error || payload
@@ -228,49 +223,30 @@ export async function routeEta(origin, destination) {
     )
   }
 
-  /*
-   * ------------------------------------------------------------
-   * NO ROUTE RETURNED
-   * ------------------------------------------------------------
-   */
+  const route = payload.routes?.[0]
 
-  if (!payload.routes?.[0]) {
-    console.error(
-      '[Google Routes API] No route returned:',
-      payload
-    )
-
+  if (!route) {
     throw Object.assign(
-      new Error(
-        'Google Routes API returned no route.'
-      ),
+      new Error('Google Routes API returned no route.'),
       { status: 502 }
     )
   }
 
-  /*
-   * ------------------------------------------------------------
-   * EXTRACT ROUTE
-   * ------------------------------------------------------------
-   */
-
-  const route = payload.routes[0]
-
   const distanceMeters = Number(route.distanceMeters)
 
-  const durationSeconds =
-    secondsFromDuration(route.duration)
+  const durationSeconds = secondsFromDuration(route.duration)
 
-  const staticSeconds =
-    secondsFromDuration(route.staticDuration)
+  const staticSeconds = secondsFromDuration(route.staticDuration)
+
+  const encodedPolyline =
+    route.polyline?.encodedPolyline || null
 
   /*
    * ------------------------------------------------------------
    * TRAFFIC CONDITION
    * ------------------------------------------------------------
-   *
-   * Compare traffic-aware duration with normal duration.
    */
+
   const ratio =
     staticSeconds > 0
       ? durationSeconds / staticSeconds
@@ -289,7 +265,9 @@ export async function routeEta(origin, destination) {
   }
 
   console.log(
-    `[Google Routes] Success | Distance: ${distanceMeters}m | ETA: ${durationSeconds}s | Traffic: ${trafficCondition}`
+    `[Google Routes] Success | Distance: ${distanceMeters}m | ` +
+    `ETA: ${durationSeconds}s | Traffic: ${trafficCondition} | ` +
+    `Polyline: ${encodedPolyline ? 'available' : 'missing'}`
   )
 
   /*
@@ -302,6 +280,218 @@ export async function routeEta(origin, destination) {
     distanceMeters,
     durationSeconds,
     trafficCondition,
-    source: 'google-routes'
+    source: 'google-routes',
+    encodedPolyline,
+    polyline: encodedPolyline
   }
+}
+
+export async function generateRoutePolyline(stops) {
+  if (!Array.isArray(stops) || stops.length < 2) {
+    throw Object.assign(
+      new Error('At least two stops are required to generate a route.'),
+      { status: 400 }
+    )
+  }
+
+  const coordinates = stops.map((stop) => ({
+    latitude: Number(stop.latitude),
+    longitude: Number(stop.longitude)
+  }))
+
+  const valid = coordinates.every(
+    ({ latitude, longitude }) =>
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      latitude >= -90 &&
+      latitude <= 90 &&
+      longitude >= -180 &&
+      longitude <= 180
+  )
+
+  if (!valid) {
+    throw Object.assign(
+      new Error('One or more route stops have invalid coordinates.'),
+      { status: 400 }
+    )
+  }
+
+  if (!['google', 'osrm'].includes(config.routingProvider)) {
+    throw Object.assign(
+      new Error(`Unsupported routing provider "${config.routingProvider}". Use ROUTING_PROVIDER=google or ROUTING_PROVIDER=osrm.`),
+      { status: 500 }
+    )
+  }
+
+  if (config.routingProvider === 'osrm') {
+    return generateOsrmRoutePolyline(coordinates)
+  }
+
+  return generateGoogleRoutePolyline(coordinates)
+}
+
+async function generateOsrmRoutePolyline(coordinates) {
+  const coordinatePath = coordinates
+    .map(({ longitude, latitude }) => `${longitude},${latitude}`)
+    .join(';')
+  const url = new URL(`/route/v1/driving/${coordinatePath}`, config.osrmBaseUrl)
+  url.search = new URLSearchParams({
+    overview: 'full',
+    geometries: 'polyline',
+    steps: 'false'
+  }).toString()
+
+  let response
+  try {
+    console.log(`[Route Geometry] Requesting OSRM route for ${coordinates.length} stops.`)
+    response = await fetch(url)
+  } catch (error) {
+    console.error('[Route Geometry] OSRM network request failed:', error)
+    throw Object.assign(
+      new Error('Could not connect to the OSRM routing service.'),
+      { status: 502, cause: error }
+    )
+  }
+
+  let payload
+  try {
+    payload = await response.json()
+  } catch {
+    throw Object.assign(
+      new Error(`OSRM returned an invalid response (HTTP ${response.status}).`),
+      { status: 502 }
+    )
+  }
+
+  if (!response.ok || payload.code !== 'Ok') {
+    console.error('[Route Geometry] OSRM API error:', payload)
+    throw Object.assign(
+      new Error(payload.message || `OSRM returned ${payload.code || `HTTP ${response.status}`}.`),
+      { status: response.ok ? 502 : response.status }
+    )
+  }
+
+  const encodedPolyline = payload.routes?.[0]?.geometry
+  if (typeof encodedPolyline !== 'string' || !encodedPolyline) {
+    throw Object.assign(
+      new Error('OSRM did not return route geometry.'),
+      { status: 502 }
+    )
+  }
+
+  console.log('[Route Geometry] OSRM route geometry generated successfully.')
+  return encodedPolyline
+}
+
+async function generateGoogleRoutePolyline(coordinates) {
+  if (!config.googleMapsApiKey) {
+    throw Object.assign(
+      new Error(
+        'Google Routes API is not configured. Configure GOOGLE_MAPS_API_KEY or set ROUTING_PROVIDER=osrm.'
+      ),
+      { status: 503 }
+    )
+  }
+
+  const [origin, ...remaining] = coordinates
+  const destination = remaining.pop()
+  const intermediateStops = remaining
+
+  const requestBody = {
+    origin: {
+      location: {
+        latLng: origin
+      }
+    },
+
+    destination: {
+      location: {
+        latLng: destination
+      }
+    },
+
+    intermediates: intermediateStops.map((stop) => ({
+      location: {
+        latLng: stop
+      }
+    })),
+
+    travelMode: 'DRIVE',
+
+    polylineQuality: 'HIGH_QUALITY',
+
+    polylineEncoding: 'ENCODED_POLYLINE'
+  }
+
+  let response
+
+  try {
+    response = await fetch(
+      'https://routes.googleapis.com/directions/v2:computeRoutes',
+      {
+        method: 'POST',
+
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': config.googleMapsApiKey,
+
+          'X-Goog-FieldMask':
+            'routes.polyline.encodedPolyline'
+        },
+
+        body: JSON.stringify(requestBody)
+      }
+    )
+  } catch (error) {
+    console.error('[Route Geometry] Network request failed:', error)
+
+    throw Object.assign(
+      new Error('Could not connect to Google Routes API.'),
+      { status: 502, cause: error }
+    )
+  }
+
+  let payload
+
+  try {
+    payload = await response.json()
+  } catch {
+    throw Object.assign(
+      new Error(
+        `Google Routes API returned an invalid response (HTTP ${response.status}).`
+      ),
+      { status: 502 }
+    )
+  }
+
+  if (!response.ok) {
+    console.error(
+      '[Route Geometry] Google API error:',
+      payload?.error || payload
+    )
+
+    throw Object.assign(
+      new Error(
+        payload?.error?.message ||
+          `Google Routes API returned HTTP ${response.status}.`
+      ),
+      { status: response.status }
+    )
+  }
+
+  const encodedPolyline =
+    payload.routes?.[0]?.polyline?.encodedPolyline
+
+  if (!encodedPolyline) {
+    throw Object.assign(
+      new Error('Google Routes API did not return a route polyline.'),
+      { status: 502 }
+    )
+  }
+
+  console.log(
+    `[Route Geometry] Generated route through ${coordinates.length} stops.`
+  )
+
+  return encodedPolyline
 }

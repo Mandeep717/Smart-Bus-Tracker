@@ -45,6 +45,8 @@ Seed demo login: `admin@smartbus.local` / `Admin@123`. Change `SEED_ADMIN_EMAIL`
 | `JWT_EXPIRES_IN` | `7d` | JWT lifetime |
 | `CORS_ORIGIN` | `http://localhost:5173` | Comma-separated allowed frontend origins; do not use `*` |
 | `GOOGLE_MAPS_API_KEY` | empty | Backend-restricted key for Routes API only |
+| `ROUTING_PROVIDER` | `osrm` | Route geometry provider: `osrm` or `google` |
+| `OSRM_BASE_URL` | `https://router.project-osrm.org` | OSRM routing service base URL |
 | `VITE_GOOGLE_MAPS_API_KEY` | empty | Browser-restricted Maps JavaScript key |
 | `ETA_CACHE_TTL_SECONDS` | `60` | Shared per bus/stop cache TTL |
 | `BUS_APPROACHING_THRESHOLD_MINUTES` | `2` | ETA crossing threshold |
@@ -72,7 +74,7 @@ Keep `.env` and Firebase service account credentials out of source control. The 
 
 ## Google Maps and traffic-aware ETA
 
-In Google Cloud, enable billing, Maps JavaScript API, and Routes API. Restrict the browser key by website referrer and the backend key by server/IP and API. Set `VITE_GOOGLE_MAPS_API_KEY` for Google Maps display and `GOOGLE_MAPS_API_KEY` for backend route calculations. The backend key is never sent to the browser or phone. With no Maps key the map uses OpenStreetMap. With no Routes key and `DEMO_MODE=true`, ETA uses a straight-line estimate and reports unknown traffic; set `DEMO_MODE=false` to require Google Routes and disable the simulator.
+In Google Cloud, enable billing, Maps JavaScript API, and Routes API. Restrict the browser key by website referrer and the backend key by server/IP and API. Set `VITE_GOOGLE_MAPS_API_KEY` for Google Maps display and `GOOGLE_MAPS_API_KEY` for backend route calculations. The backend key is never sent to the browser or phone. Set `ROUTING_PROVIDER=osrm` to generate saved road geometry through OSRM without a Google backend key; OSRM receives the ordered stop coordinates and returns a full encoded polyline. Set `ROUTING_PROVIDER=google` to use Google Routes for geometry. With no Maps key the map uses OpenStreetMap. With no Routes key and `DEMO_MODE=true`, ETA uses a straight-line estimate and reports unknown traffic; set `DEMO_MODE=false` to require Google Routes and disable the simulator.
 
 Google Routes is called for a shared bus/stop combination, not per student. Requests are cache-backed and concurrent requests for the same key join one pending calculation. GPS updates do not force a Routes call before the configured TTL expires. Development logs indicate `CACHE`, `DEMO`, or `GOOGLE_ROUTES` without logging credentials.
 

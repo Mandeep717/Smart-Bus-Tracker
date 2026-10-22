@@ -8,6 +8,7 @@ export default function RoutesAndStops({ routes, showNotice, onRefresh }) {
   const [stopForm, setStopForm] = useState({ stopId: '', stopName: '', latitude: '', longitude: '', sequence: 1 })
   const [routeDraft, setRouteDraft] = useState(null)
   const [editingStop, setEditingStop] = useState(null)
+  const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
   const route = routes.find((item) => item._id === selectedId)
   const orderedStops = [...(route?.stops || [])].filter((stop) => stop.isActive !== false).sort((a, b) => a.sequence - b.sequence)
@@ -31,6 +32,16 @@ export default function RoutesAndStops({ routes, showNotice, onRefresh }) {
     event.preventDefault(); if (!route) return; setError('')
     try { await put(`/routes/${encodeURIComponent(route.routeId)}`, routeDraft); showNotice('Route details updated.'); await onRefresh() }
     catch (reason) { setError(reason.message) }
+  }
+  const generatePolyline = async () => {
+    if (!route || orderedStops.length < 2) return
+    setError(''); setGenerating(true)
+    try {
+      await post(`/routes/${encodeURIComponent(route.routeId)}/generate-polyline`)
+      showNotice('Road-following route geometry generated and saved.')
+      await onRefresh()
+    } catch (reason) { setError(reason.message) }
+    finally { setGenerating(false) }
   }
   const deactivateRoute = async () => {
     if (!route || !window.confirm(`Deactivate ${route.routeName}?`)) return
@@ -69,6 +80,7 @@ export default function RoutesAndStops({ routes, showNotice, onRefresh }) {
       <label className="select-label">Select a route<select value={selectedId} onChange={(event) => setSelectedId(event.target.value)}><option value="">Choose a route</option>{routes.map((item) => <option key={item._id} value={item._id}>{item.routeName}{item.isActive ? '' : ' (inactive)'}</option>)}</select></label>
       {route ? <>
         <div className="route-preview"><span className="route-preview-icon"><Navigation size={16} /></span><span><b>{route.routeName}</b><small>{route.origin} <ArrowRight size={10} /> {route.destination}</small></span><span className="route-preview-stops">{orderedStops.length} stops</span></div>
+        <button type="button" className="button-primary compact-button" disabled={generating || orderedStops.length < 2} onClick={generatePolyline}><Sparkles size={14} /> {generating ? 'Generating route…' : 'Generate road route'}</button>
         <form className="route-details-form" onSubmit={saveRoute}><div className="route-details-heading"><span className="form-subheading"><Pencil size={13} /> Route details</span><button type="button" className="text-button danger-text" onClick={deactivateRoute}>Deactivate route</button></div><div className="form-grid compact"><label>Route name<input required value={routeDraft?.routeName || ''} onChange={(event) => setRouteDraft({ ...routeDraft, routeName: event.target.value })} /></label><label>Starting point<input required value={routeDraft?.origin || ''} onChange={(event) => setRouteDraft({ ...routeDraft, origin: event.target.value })} /></label><label className="full-field">Destination<input required value={routeDraft?.destination || ''} onChange={(event) => setRouteDraft({ ...routeDraft, destination: event.target.value })} /></label></div><button className="button-outline compact-button"><Check size={13} /> Save route</button></form>
         <div className="stop-admin-list">{orderedStops.map((stop, index) => <div className="stop-admin-group" key={stop._id}><div className="stop-admin-row"><span className="stop-sequence">{String(index + 1).padStart(2, '0')}</span><span><b>{stop.stopName}</b><small>{Number(stop.latitude).toFixed(4)}, {Number(stop.longitude).toFixed(4)}</small></span><button className="icon-button reorder-button" title="Move stop up" disabled={index === 0} onClick={() => reorderStop(index, -1)}><ArrowUp size={13} /></button><button className="icon-button reorder-button" title="Move stop down" disabled={index === orderedStops.length - 1} onClick={() => reorderStop(index, 1)}><ArrowDown size={13} /></button><button className="icon-button" title="Edit stop" onClick={() => setEditingStop({ stopId: stop.stopId, stopName: stop.stopName, latitude: stop.latitude, longitude: stop.longitude })}><Pencil size={13} /></button><button className="icon-button danger-icon" title="Remove stop" onClick={() => deleteStop(stop)}><X size={14} /></button></div>{editingStop?.stopId === stop.stopId && <form className="stop-edit-form" onSubmit={saveStop}><label>Stop name<input required value={editingStop.stopName} onChange={(event) => setEditingStop({ ...editingStop, stopName: event.target.value })} /></label><label>Latitude<input required type="number" step="any" value={editingStop.latitude} onChange={(event) => setEditingStop({ ...editingStop, latitude: event.target.value })} /></label><label>Longitude<input required type="number" step="any" value={editingStop.longitude} onChange={(event) => setEditingStop({ ...editingStop, longitude: event.target.value })} /></label><button className="text-button" type="button" onClick={() => setEditingStop(null)}>Cancel</button><button className="button-primary compact-button"><Check size={13} /> Save stop</button></form>}</div>)}</div>
         <form className="add-stop-form" onSubmit={createStop}><span className="form-subheading"><Plus size={14} /> Add a stop</span><div className="form-grid compact"><label>Stop ID<input required value={stopForm.stopId} onChange={(event) => setStopForm({ ...stopForm, stopId: event.target.value.toUpperCase() })} placeholder="NORTH-05" /></label><label>Stop name<input required value={stopForm.stopName} onChange={(event) => setStopForm({ ...stopForm, stopName: event.target.value })} placeholder="Library Gate" /></label><label>Latitude<input required type="number" step="any" value={stopForm.latitude} onChange={(event) => setStopForm({ ...stopForm, latitude: event.target.value })} placeholder="17.4050" /></label><label>Longitude<input required type="number" step="any" value={stopForm.longitude} onChange={(event) => setStopForm({ ...stopForm, longitude: event.target.value })} placeholder="78.5570" /></label><label className="full-field">Sequence<input required type="number" min="1" value={stopForm.sequence} onChange={(event) => setStopForm({ ...stopForm, sequence: Number(event.target.value) })} /></label></div><button className="button-primary compact-button"><Plus size={14} /> Add stop</button></form>

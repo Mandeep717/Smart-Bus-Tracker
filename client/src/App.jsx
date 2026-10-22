@@ -122,7 +122,7 @@ function TrackPage({ busId, onHome, showNotice, notice }) {
       <div className="tracking-topline"><button className="back-link" onClick={onHome}><ArrowLeft size={16} /> Back to search</button><span className="tracking-updated"><span className={`status-dot ${status.toLowerCase()}`}></span>{socketLive ? 'Live connection' : 'Connecting'} <span className="top-divider">·</span> {relativeTime(bus?.lastLocationUpdate)}</span></div>
       {loading ? <div className="loading-panel"><div className="spinner"></div><span>Finding your bus…</span></div> : error ? <div className="empty-state"><span className="empty-icon"><BusFront /></span><h2>We couldn't find that bus</h2><p>{error}</p><button className="button-primary" onClick={onHome}>Try another Bus ID <ArrowRight size={16} /></button></div> : bus && <>
         <div className="tracking-heading"><div><div className="eyebrow"><span className="eyebrow-dot"></span> YOUR CAMPUS JOURNEY</div><h1>{bus.busName || bus.busId}</h1><p>{bus.registrationNumber} <span>·</span> {bus.route?.routeName || 'Campus route'}</p></div><div className={`tracker-pill ${status.toLowerCase()}`}><span className="status-dot"></span><div><b>{status === 'LIVE' ? 'Live now' : status === 'DELAYED' ? 'GPS delayed' : status === 'OFFLINE' ? 'Location unavailable' : status === 'INACTIVE' ? 'Bus inactive' : 'Waiting for GPS'}</b><small>{relativeTime(bus.lastLocationUpdate)}</small></div><Signal size={16} /></div></div>
-        <div className="track-grid"><section className="map-panel"><div className="map-panel-top"><div><span className="panel-label">LIVE BUS LOCATION</span><span className="map-route-caption"><span className="status-dot live"></span> {bus.route?.origin} <ArrowRight size={12} /> {bus.route?.destination}</span></div><button className="icon-button" title="Refresh bus" onClick={() => { setRefreshKey((key) => key + 1); api(`/buses/${encodeURIComponent(busId)}`).then(setBus).catch((reason) => showNotice(reason.message)) }}><Activity size={17} /></button></div><div className="live-map-wrap"><Suspense fallback={<div className="map-overlay"><span className="spinner"></span><b>Loading map…</b></div>}><MapView location={currentLocation} stops={stops} selectedStop={selectedStop} /></Suspense>{!currentLocation && <div className="map-overlay"><span><MapPin size={20} /></span><b>Waiting for a GPS update</b><small>The bus marker will appear as soon as the tracker reports in.</small></div>}<div className="map-attribution-pill">{bus.route?.stops?.length || 0} route stops <span>·</span> {import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? 'Google Maps' : 'OpenStreetMap'}</div></div><div className="map-foot"><div className="legend-item"><span className="legend-bus"><BusFront size={13} /></span><span>Your bus</span></div><div className="legend-item"><span className="legend-stop"></span><span>Route stops</span></div><div className="map-foot-meta"><Gauge size={14} /> {currentLocation?.speed ?? '—'} km/h <span>·</span> Updated {relativeTime(bus.lastLocationUpdate)}</div></div></section>
+        <div className="track-grid"><section className="map-panel"><div className="map-panel-top"><div><span className="panel-label">LIVE BUS LOCATION</span><span className="map-route-caption"><span className="status-dot live"></span> {bus.route?.origin} <ArrowRight size={12} /> {bus.route?.destination}</span></div><button className="icon-button" title="Refresh bus" onClick={() => { setRefreshKey((key) => key + 1); api(`/buses/${encodeURIComponent(busId)}`).then(setBus).catch((reason) => showNotice(reason.message)) }}><Activity size={17} /></button></div><div className="live-map-wrap"><Suspense fallback={<div className="map-overlay"><span className="spinner"></span><b>Loading map…</b></div>}><MapView location={currentLocation} stops={stops} selectedStop={selectedStop} route={bus.route} /></Suspense>{!currentLocation && <div className="map-overlay"><span><MapPin size={20} /></span><b>Waiting for a GPS update</b><small>The bus marker will appear as soon as the tracker reports in.</small></div>}<div className="map-attribution-pill">{bus.route?.stops?.length || 0} route stops <span>·</span> {import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? 'Google Maps' : 'OpenStreetMap'}</div></div><div className="map-foot"><div className="legend-item"><span className="legend-bus"><BusFront size={13} /></span><span>Your bus</span></div><div className="legend-item"><span className="legend-stop"></span><span>Route stops</span></div><div className="map-foot-meta"><Gauge size={14} /> {currentLocation?.speed ?? '—'} km/h <span>·</span> Updated {relativeTime(bus.lastLocationUpdate)}</div></div></section>
           <aside className="journey-side"><div className="eta-card"><div className="eta-card-header"><span className="panel-label">YOUR ARRIVAL</span><span className={`traffic-chip ${eta?.trafficCondition?.toLowerCase() || 'unknown'}`}><i></i>{eta?.trafficCondition || 'UNKNOWN'} TRAFFIC</span></div><div className="eta-main"><div className="eta-number">{minutes ?? '—'}<span>min</span></div><div className="eta-detail"><b>{selectedStop?.stopName || 'Choose a stop'}</b><small>{eta ? `${(eta.distanceMeters / 1000).toFixed(1)} km away` : !selectedStop ? 'Select a pickup point' : currentLocation ? 'Calculating arrival time…' : 'Waiting for live location'}</small></div></div><div className="eta-card-foot"><span><Clock3 size={14} /> {eta ? `Arriving around ${displayTime(eta.eta)}` : !selectedStop ? 'Choose your pickup point to see ETA' : 'ETA appears when GPS is available'}</span><span className="eta-source">{eta?.source === 'demo' ? 'DEMO ETA' : eta?.source === 'google-routes' ? 'LIVE ROUTING' : '—'}</span></div></div>
             <div className="stop-card"><div className="card-title-row"><div><span className="panel-label">PICKUP POINT</span><h3>Where are you headed?</h3></div><MapPin size={18} /></div><label className="select-wrap"><select value={stopId} onChange={(event) => changeStop(event.target.value)}><option value="">Select your stop</option>{stops.map((stop) => <option key={stop.stopId} value={stop.stopId}>{stop.stopName}</option>)}</select><ChevronDown size={16} /></label><div className="stop-list">{stops.map((stop, index) => <button key={stop.stopId} className={`stop-row ${stop.stopId === stopId ? 'selected' : ''}`} onClick={() => changeStop(stop.stopId)}><span className="stop-sequence">{String(index + 1).padStart(2, '0')}</span><span className="stop-name">{stop.stopName}<small>{index === 0 ? 'Route origin' : index === stops.length - 1 ? 'Campus arrival' : `Stop ${index + 1}`}</small></span>{stop.stopId === stopId ? <span className="selected-check"><Check size={13} /></span> : <ArrowRight size={14} className="stop-arrow" />}</button>)}</div></div>
             {selectedStop && <PushAlerts busId={busId} stopId={stopId} stopName={selectedStop.stopName} showNotice={showNotice} />}
@@ -514,45 +514,479 @@ function PushAlerts({ busId, stopId, stopName, showNotice }) {
 }
 
 function DeviceTrackerPage({ busId }) {
-  const [device, setDevice] = useState(null), [deviceId, setDeviceId] = useState(''), [deviceToken, setDeviceToken] = useState(''), [tracking, setTracking] = useState(false), [state, setState] = useState('GPS READY'), [error, setError] = useState(''), [position, setPosition] = useState(null), [online, setOnline] = useState(navigator.onLine)
-  const watchId = useRef(null), lastSentAt = useRef(0), timer = useRef(null), pending = useRef(null), sending = useRef(false), credentials = useRef({ deviceId: '', deviceToken: '' })
-  useEffect(() => { api(`/tracking/device/${encodeURIComponent(busId)}`).then((data) => { setDevice(data); setDeviceId(data.gpsDeviceId); credentials.current.deviceId = data.gpsDeviceId; const saved = sessionStorage.getItem(`smartbus.gps.${busId}`); if (saved) { setDeviceToken(saved); credentials.current.deviceToken = saved } }).catch((reason) => setError(reason.message)) }, [busId])
-  useEffect(() => { const update = () => { const isOnline = navigator.onLine; setOnline(isOnline); if (isOnline && pending.current && tracking) sendFix(pending.current) }; window.addEventListener('online', update); window.addEventListener('offline', update); return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); window.clearTimeout(timer.current); if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current) } }, [tracking])
+  const [device, setDevice] = useState(null)
+  const [deviceId, setDeviceId] = useState('')
+  const [deviceToken, setDeviceToken] = useState('')
+  const [tracking, setTracking] = useState(false)
+  const [state, setState] = useState('GPS READY')
+  const [error, setError] = useState('')
+  const [position, setPosition] = useState(null)
+  const [online, setOnline] = useState(navigator.onLine)
+
+  const watchId = useRef(null)
+  const lastSentAt = useRef(0)
+  const timer = useRef(null)
+  const pending = useRef(null)
+  const sending = useRef(false)
+  const credentials = useRef({
+    deviceId: '',
+    deviceToken: '',
+  })
+
+  // Load device details and previously entered token.
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadDevice() {
+      try {
+        const data = await api(
+          `/tracking/device/${encodeURIComponent(busId)}`
+        )
+
+        if (cancelled) return
+
+        setDevice(data)
+        setDeviceId(data.gpsDeviceId)
+
+        credentials.current.deviceId = data.gpsDeviceId
+
+        const saved = sessionStorage.getItem(
+          `smartbus.gps.${busId}`
+        )
+
+        if (saved) {
+          setDeviceToken(saved)
+          credentials.current.deviceToken = saved
+        }
+      } catch (reason) {
+        if (!cancelled) {
+          console.error('[GPS] Device loading failed:', reason)
+          setError(reason.message)
+        }
+      }
+    }
+
+    loadDevice()
+
+    return () => {
+      cancelled = true
+    }
+  }, [busId])
+
+  // Track network availability and clean up on unmount.
+  useEffect(() => {
+    const update = () => {
+      const isOnline = navigator.onLine
+      setOnline(isOnline)
+
+      if (isOnline && pending.current && tracking) {
+        void sendFix(pending.current)
+      }
+    }
+
+    window.addEventListener('online', update)
+    window.addEventListener('offline', update)
+
+    return () => {
+      window.removeEventListener('online', update)
+      window.removeEventListener('offline', update)
+
+      window.clearTimeout(timer.current)
+
+      if (watchId.current !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchId.current)
+      }
+    }
+  }, [tracking])
+
+  // Send the latest GPS fix to the backend.
   const sendFix = async (fix) => {
     pending.current = fix
-    if (!navigator.onLine) { setState('TRACKING'); setError('Network unavailable — retrying...'); return }
+
+    if (!navigator.onLine) {
+      setError('Network unavailable. Waiting to reconnect.')
+      return
+    }
+
     if (sending.current) return
-    const wait = lastSentAt.current ? 5000 - (Date.now() - lastSentAt.current) : 0
-    if (wait > 0) { window.clearTimeout(timer.current); timer.current = window.setTimeout(() => pending.current && void sendFix(pending.current), wait); return }
+
+    const wait = lastSentAt.current
+      ? 5000 - (Date.now() - lastSentAt.current)
+      : 0
+
+    if (wait > 0) {
+      window.clearTimeout(timer.current)
+
+      timer.current = window.setTimeout(() => {
+        if (pending.current) {
+          void sendFix(pending.current)
+        }
+      }, wait)
+
+      return
+    }
+
     const outbound = pending.current
+
     sending.current = true
     lastSentAt.current = Date.now()
+
+    console.log('[GPS] Sending location:', {
+      busId,
+      gpsDeviceId: credentials.current.deviceId,
+      latitude: outbound.latitude,
+      longitude: outbound.longitude,
+      accuracy: outbound.accuracy,
+    })
+
     try {
-      await post('/tracking/location', { busId, gpsDeviceId: credentials.current.deviceId, gpsDeviceToken: credentials.current.deviceToken, ...outbound })
-      if (pending.current === outbound) pending.current = null
-      setState('TRACKING'); setError('')
-    } catch (reason) { setError(reason.message); if (reason.message.toLowerCase().includes('credential')) { if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current); watchId.current = null; window.clearTimeout(timer.current); pending.current = null; setTracking(false); setState('ERROR') } }
-    finally {
+      const result = await post('/tracking/location', {
+        busId,
+        gpsDeviceId: credentials.current.deviceId,
+        gpsDeviceToken: credentials.current.deviceToken,
+        ...outbound,
+      })
+
+      console.log('[GPS] Backend accepted update:', result)
+
+      if (pending.current === outbound) {
+        pending.current = null
+      }
+
+      setState('TRACKING')
+      setError('')
+    } catch (reason) {
+      console.error('[GPS] Backend request failed:', reason)
+
+      setError(
+        `Location submission failed: ${
+          reason.message || 'Unknown API error'
+        }`
+      )
+
+      // Stop if the backend explicitly reports a credential error.
+      if (
+        String(reason.message).toLowerCase().includes('credential') ||
+        String(reason.message).includes('401') ||
+        String(reason.message).includes('403')
+      ) {
+        if (watchId.current !== null) {
+          navigator.geolocation.clearWatch(watchId.current)
+        }
+
+        watchId.current = null
+        window.clearTimeout(timer.current)
+        pending.current = null
+
+        setTracking(false)
+        setState('ERROR')
+      }
+    } finally {
       sending.current = false
-      if (pending.current && navigator.onLine) { window.clearTimeout(timer.current); timer.current = window.setTimeout(() => pending.current && void sendFix(pending.current), Math.max(50, 5000 - (Date.now() - lastSentAt.current))) }
+
+      if (pending.current && navigator.onLine) {
+        window.clearTimeout(timer.current)
+
+        timer.current = window.setTimeout(() => {
+          if (pending.current) {
+            void sendFix(pending.current)
+          }
+        }, Math.max(
+          50,
+          5000 - (Date.now() - lastSentAt.current)
+        ))
+      }
     }
   }
+
+  // Called when the phone successfully obtains its location.
   const acceptPosition = (positionValue) => {
     const coords = positionValue.coords
-    const fix = { latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy ?? 0, speed: coords.speed == null ? 0 : Math.max(0, coords.speed * 3.6), heading: coords.heading ?? 0, timestamp: new Date(positionValue.timestamp).toISOString() }
+
+    const fix = {
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      accuracy: coords.accuracy ?? 0,
+      speed:
+        coords.speed == null
+          ? 0
+          : Math.max(0, coords.speed * 3.6),
+      heading: coords.heading ?? 0,
+      timestamp: new Date(
+        positionValue.timestamp
+      ).toISOString(),
+    }
+
+    console.log('[GPS] Location received:', fix)
+
     setPosition(fix)
-    const remaining = 5000 - (Date.now() - lastSentAt.current)
-    if (remaining <= 0) void sendFix(fix)
-    else { pending.current = fix; window.clearTimeout(timer.current); timer.current = window.setTimeout(() => pending.current && void sendFix(pending.current), remaining) }
+    setError('')
+
+    const remaining =
+      5000 - (Date.now() - lastSentAt.current)
+
+    if (remaining <= 0) {
+      void sendFix(fix)
+    } else {
+      pending.current = fix
+
+      window.clearTimeout(timer.current)
+
+      timer.current = window.setTimeout(() => {
+        if (pending.current) {
+          void sendFix(pending.current)
+        }
+      }, remaining)
+    }
   }
+
+  // Called when the phone cannot obtain its location.
+  const handleGpsError = (reason) => {
+    console.error('[GPS] Location error:', {
+      code: reason.code,
+      message: reason.message,
+    })
+
+    setState('ERROR')
+
+    if (reason.code === 1) {
+      setError(
+        'Location permission denied. Allow location access in browser and phone settings.'
+      )
+    } else if (reason.code === 2) {
+      setError(
+        'Phone location unavailable. Enable Location services and try outdoors.'
+      )
+    } else if (reason.code === 3) {
+      setError(
+        'GPS request timed out. Move near a window or outdoors and wait for another reading.'
+      )
+    } else {
+      setError(
+        reason.message || 'An unknown GPS error occurred.'
+      )
+    }
+  }
+
+  // Start requesting live phone coordinates.
   const startTracking = () => {
-    if (!credentials.current.deviceId || !credentials.current.deviceToken) { setError('Enter the GPS device token supplied by your administrator.'); return }
-    if (!navigator.geolocation) { setState('ERROR'); setError('This browser does not support GPS location.'); return }
-    setError(''); setState('TRACKING'); setTracking(true)
-    watchId.current = navigator.geolocation.watchPosition(acceptPosition, (reason) => { setState('ERROR'); setError(reason.code === 1 ? 'Location permission denied. Allow location access in browser settings.' : reason.code === 2 ? 'GPS is unavailable. Move outdoors and check device location settings.' : 'GPS request timed out. Waiting for another location update.') }, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 })
+    console.log('[GPS DEBUG] Position received:', positionValue)
+    if (
+      !credentials.current.deviceId ||
+      !credentials.current.deviceToken
+    ) {
+      setError(
+        'Enter the GPS device token supplied by your administrator.'
+      )
+      return
+    }
+
+    if (!navigator.geolocation) {
+      setState('ERROR')
+      setError(
+        'This browser does not support GPS location.'
+      )
+      return
+    }
+
+    if (!window.isSecureContext) {
+      setState('ERROR')
+      setError(
+        'GPS requires HTTPS or another trusted secure context.'
+      )
+      return
+    }
+
+    if (watchId.current !== null) {
+      navigator.geolocation.clearWatch(watchId.current)
+    }
+
+    window.clearTimeout(timer.current)
+
+    watchId.current = null
+    lastSentAt.current = 0
+    pending.current = null
+    sending.current = false
+
+    setPosition(null)
+    setError('')
+    setState('REQUESTING GPS')
+    setTracking(true)
+
+    console.log('[GPS] Starting phone location watch:', {
+      busId,
+      deviceId: credentials.current.deviceId,
+      secureContext: window.isSecureContext,
+      geolocationSupported: Boolean(navigator.geolocation),
+    })
+
+    watchId.current = navigator.geolocation.watchPosition(
+      acceptPosition,
+      handleGpsError,
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 30000,
+      }
+    )
   }
-  const stopTracking = () => { if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current); watchId.current = null; window.clearTimeout(timer.current); pending.current = null; setTracking(false); setState('GPS READY') }
-  return <main className="device-tracker-shell"><div className="device-tracker-card"><Brand /><span className="section-kicker">GPS TRACKER</span><h1>{device?.busName || 'Phone GPS tracker'}</h1><p>Send this phone’s live location securely to Smart Bus Tracker.</p>{error && <div className="inline-error">{error}</div>}<div className="device-info-grid"><span>Bus ID</span><b>{busId}</b><span>GPS Device</span><b>{device?.gpsDeviceId || 'Loading…'}</b><span>Status</span><b className={state === 'ERROR' ? 'device-error' : ''}>{state}</b><span>Network</span><b>{online ? 'Online' : 'Unavailable — retrying…'}</b><span>Latitude</span><b>{position?.latitude?.toFixed(6) ?? '—'}</b><span>Longitude</span><b>{position?.longitude?.toFixed(6) ?? '—'}</b><span>Accuracy</span><b>{position ? `${Math.round(position.accuracy)} m` : '—'}</b><span>Speed</span><b>{position ? `${position.speed.toFixed(1)} km/h` : '—'}</b><span>Heading</span><b>{position ? `${Math.round(position.heading)}°` : '—'}</b><span>Last update</span><b>{position ? new Date(position.timestamp).toLocaleTimeString() : '—'}</b></div><label>GPS device ID<input autoComplete="off" value={deviceId} onChange={(event) => { setDeviceId(event.target.value); credentials.current.deviceId = event.target.value }} /></label><label>GPS device token<input type="password" autoComplete="off" value={deviceToken} onChange={(event) => { setDeviceToken(event.target.value); credentials.current.deviceToken = event.target.value; sessionStorage.setItem(`smartbus.gps.${busId}`, event.target.value) }} /></label><div className="device-actions"><button className="button-primary" disabled={tracking || !device?.isActive || device?.status !== 'active'} onClick={startTracking}>START TRACKING</button><button className="button-quiet" disabled={!tracking} onClick={stopTracking}>STOP TRACKING</button></div><small>Location updates are sent at most once every five seconds. Keep this page open while tracking.</small></div></main>
+
+  // Stop location updates.
+  const stopTracking = () => {
+    if (watchId.current !== null) {
+      navigator.geolocation.clearWatch(watchId.current)
+    }
+
+    watchId.current = null
+
+    window.clearTimeout(timer.current)
+
+    pending.current = null
+
+    setTracking(false)
+    setState('GPS READY')
+    setError('')
+  }
+
+  return (
+    <main className="device-tracker-shell">
+      <div className="device-tracker-card">
+        <Brand />
+
+        <span className="section-kicker">
+          GPS TRACKER
+        </span>
+
+        <h1>
+          {device?.busName || 'Phone GPS tracker'}
+        </h1>
+
+        <p>
+          Send this phone’s live location securely to
+          Smart Bus Tracker.
+        </p>
+
+        {error && (
+          <div className="inline-error" role="alert">
+            {error}
+          </div>
+        )}
+
+        <div className="device-info-grid">
+          <span>Bus ID</span>
+          <b>{busId}</b>
+
+          <span>GPS Device</span>
+          <b>{device?.gpsDeviceId || 'Loading…'}</b>
+
+          <span>Status</span>
+          <b className={state === 'ERROR' ? 'device-error' : ''}>
+            {state}
+          </b>
+
+          <span>Network</span>
+          <b>
+            {online ? 'Online' : 'Offline — retrying'}
+          </b>
+
+          <span>Latitude</span>
+          <b>{position?.latitude?.toFixed(6) ?? '—'}</b>
+
+          <span>Longitude</span>
+          <b>{position?.longitude?.toFixed(6) ?? '—'}</b>
+
+          <span>Accuracy</span>
+          <b>
+            {position
+              ? `${Math.round(position.accuracy)} m`
+              : '—'}
+          </b>
+
+          <span>Speed</span>
+          <b>
+            {position
+              ? `${position.speed.toFixed(1)} km/h`
+              : '—'}
+          </b>
+
+          <span>Heading</span>
+          <b>
+            {position
+              ? `${Math.round(position.heading)}°`
+              : '—'}
+          </b>
+
+          <span>Last update</span>
+          <b>
+            {position
+              ? new Date(position.timestamp).toLocaleTimeString()
+              : '—'}
+          </b>
+        </div>
+
+        <label>
+          GPS device ID
+          <input
+            autoComplete="off"
+            value={deviceId}
+            onChange={(event) => {
+              const value = event.target.value
+
+              setDeviceId(value)
+              credentials.current.deviceId = value
+            }}
+          />
+        </label>
+
+        <label>
+          GPS device token
+          <input
+            type="password"
+            autoComplete="off"
+            value={deviceToken}
+            onChange={(event) => {
+              const value = event.target.value
+
+              setDeviceToken(value)
+              credentials.current.deviceToken = value
+
+              sessionStorage.setItem(
+                `smartbus.gps.${busId}`,
+                value
+              )
+            }}
+          />
+        </label>
+
+        <div className="device-actions">
+          <button
+            className="button-primary"
+            disabled={
+              tracking ||
+              !device?.isActive ||
+              device?.status !== 'active'
+            }
+            onClick={startTracking}
+          >
+            {tracking ? 'TRACKING…' : 'START TRACKING'}
+          </button>
+
+          <button
+            className="button-quiet"
+            disabled={!tracking}
+            onClick={stopTracking}
+          >
+            STOP TRACKING
+          </button>
+        </div>
+
+        <small>
+          Location updates are sent at most once every five
+          seconds. Keep this page open while tracking.
+        </small>
+      </div>
+    </main>
+  )
 }
 
 function AdminPage({ showNotice, notice, onHome }) {

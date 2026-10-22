@@ -9,6 +9,8 @@ export const config = {
   jwtSecret: process.env.JWT_SECRET || 'local-development-secret-change-me',
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  routingProvider: String(process.env.ROUTING_PROVIDER || 'osrm').trim().toLowerCase(),
+  osrmBaseUrl: process.env.OSRM_BASE_URL || 'https://router.project-osrm.org',
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
   etaTtlSeconds: number('ETA_CACHE_TTL_SECONDS', 90),
   gpsTimeoutSeconds: number('GPS_UPDATE_TIMEOUT_SECONDS', 30),

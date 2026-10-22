@@ -22,7 +22,7 @@ app.set('io', io)
 
 app.use(cors({ origin: allowedOrigins, credentials: true }))
 app.use(express.json({ limit: '100kb' }))
-app.get('/api/health', (req, res) => res.json({ success: true, data: { service: 'smart-bus-tracker', database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected', maps: config.googleMapsApiKey ? 'google-routes' : config.demoMode ? 'demo' : 'unconfigured', demoMode: config.demoMode } }))
+app.get('/api/health', (req, res) => res.json({ success: true, data: { service: 'smart-bus-tracker', database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected', maps: config.routingProvider === 'osrm' ? 'osrm' : config.googleMapsApiKey ? 'google-routes' : config.demoMode ? 'demo' : 'unconfigured', routingProvider: config.routingProvider, demoMode: config.demoMode } }))
 app.use('/api', api)
 app.use(notFound)
 app.use(errorHandler)
